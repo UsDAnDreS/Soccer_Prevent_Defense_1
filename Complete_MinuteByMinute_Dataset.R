@@ -112,22 +112,22 @@ my.func <- function(x){
 }
 
 
-interm.df <- our.df %>%
-  select(gameId, ID, half_id, Minute.clean,  homeScore, awayScore, homeRedCardTot, awayRedCardTot, Weighted.Win.Prob.Home, ShotAttempts) %>%
-  mutate(ShotAttempt.Home = ifelse(ShotAttempts == "Home", TRUE, FALSE),
-         ShotAttempt.Away = ifelse(ShotAttempts == "Away", TRUE, FALSE)) %>%
-  group_by(gameId, ID, half_id, Minute.clean,  homeScore, awayScore, homeRedCardTot, awayRedCardTot) %>%
-  summarise(ShotAttempt = my.func(ShotAttempt.Home)) %>%
-  # summarise(ShotAttempt = ifelse(sum(ShotAttempt.Home) > 0, rep(TRUE, sum(ShotAttempt.Home)), FALSE)) %>%
-  # ShotAttempt.Away = ifelse(sum(ShotAttempt.Away > 0), rep(TRUE, sum(ShotAttempt.Away)), FALSE)) %>%
-  ungroup() %>%
-  group_by(gameId, ID) %>%
-  arrange(desc(half_id), desc(Minute.clean), desc(homeScore), desc(awayScore), .by_group=TRUE) %>%
-  ungroup() %>%
-  mutate(ScoreDiff = homeScore - awayScore,
-         RedCardDiff = homeRedCardTot - awayRedCardTot) %>%
-  select(-homeScore, -awayScore, -homeRedCardTot, -awayRedCardTot) %>%
-  mutate(Home.Away = "Home")
+# interm.df <- our.df %>%
+#   select(gameId, ID, half_id, Minute.clean,  homeScore, awayScore, homeRedCardTot, awayRedCardTot, Weighted.Win.Prob.Home, ShotAttempts) %>%
+#   mutate(ShotAttempt.Home = ifelse(ShotAttempts == "Home", TRUE, FALSE),
+#          ShotAttempt.Away = ifelse(ShotAttempts == "Away", TRUE, FALSE)) %>%
+#   group_by(gameId, ID, half_id, Minute.clean,  homeScore, awayScore, homeRedCardTot, awayRedCardTot) %>%
+#   summarise(ShotAttempt = my.func(ShotAttempt.Home)) %>%
+#   # summarise(ShotAttempt = ifelse(sum(ShotAttempt.Home) > 0, rep(TRUE, sum(ShotAttempt.Home)), FALSE)) %>%
+#   # ShotAttempt.Away = ifelse(sum(ShotAttempt.Away > 0), rep(TRUE, sum(ShotAttempt.Away)), FALSE)) %>%
+#   ungroup() %>%
+#   group_by(gameId, ID) %>%
+#   arrange(desc(half_id), desc(Minute.clean), desc(homeScore), desc(awayScore), .by_group=TRUE) %>%
+#   ungroup() %>%
+#   mutate(ScoreDiff = homeScore - awayScore,
+#          RedCardDiff = homeRedCardTot - awayRedCardTot) %>%
+#   select(-homeScore, -awayScore, -homeRedCardTot, -awayRedCardTot) %>%
+#   mutate(Home.Away = "Home")
 
 
 diff(interm.df$Minute.clean)
@@ -140,7 +140,7 @@ rbind(
     select(gameId, ID, half_id, Minute.clean,  homeScore, awayScore, homeRedCardTot, awayRedCardTot, Weighted.Win.Prob.Home, ShotAttempts) %>%
     mutate(ShotAttempt.Home = ifelse(ShotAttempts == "Home", TRUE, FALSE),
            ShotAttempt.Away = ifelse(ShotAttempts == "Away", TRUE, FALSE)) %>%
-    group_by(gameId, ID, half_id, Minute.clean,  homeScore, awayScore, homeRedCardTot, awayRedCardTot) %>%
+    group_by(gameId, ID, half_id, Minute.clean,  homeScore, awayScore, homeRedCardTot, awayRedCardTot, Weighted.Win.Prob.Home) %>%
     summarise(ShotAttempt = my.func(ShotAttempt.Home)) %>%
     # summarise(ShotAttempt = ifelse(sum(ShotAttempt.Home) > 0, rep(TRUE, sum(ShotAttempt.Home)), FALSE)) %>%
     # ShotAttempt.Away = ifelse(sum(ShotAttempt.Away > 0), rep(TRUE, sum(ShotAttempt.Away)), FALSE)) %>%
@@ -151,13 +151,14 @@ rbind(
     mutate(ScoreDiff = homeScore - awayScore,
            RedCardDiff = homeRedCardTot - awayRedCardTot) %>%
     select(-homeScore, -awayScore, -homeRedCardTot, -awayRedCardTot) %>%
-    mutate(Home.Away = "Home"),
+    mutate(Home.Away = "Home") %>%
+    rename(Weighted.Win.Prob=Weighted.Win.Prob.Home),
   
   our.df %>%
     select(gameId, ID, half_id, Minute.clean,  homeScore, awayScore, homeRedCardTot, awayRedCardTot, Weighted.Win.Prob.Home, ShotAttempts) %>%
     mutate(ShotAttempt.Home = ifelse(ShotAttempts == "Home", TRUE, FALSE),
            ShotAttempt.Away = ifelse(ShotAttempts == "Away", TRUE, FALSE)) %>%
-    group_by(gameId, ID, half_id, Minute.clean,  homeScore, awayScore, homeRedCardTot, awayRedCardTot) %>%
+    group_by(gameId, ID, half_id, Minute.clean,  homeScore, awayScore, homeRedCardTot, awayRedCardTot, Weighted.Win.Prob.Home) %>%
     summarise(ShotAttempt = my.func(ShotAttempt.Away)) %>%
     # summarise(ShotAttempt = ifelse(sum(ShotAttempt.Home) > 0, rep(TRUE, sum(ShotAttempt.Home)), FALSE)) %>%
     # ShotAttempt.Away = ifelse(sum(ShotAttempt.Away > 0), rep(TRUE, sum(ShotAttempt.Away)), FALSE)) %>%
@@ -168,15 +169,17 @@ rbind(
     mutate(ScoreDiff = -(homeScore - awayScore),
            RedCardDiff = -(homeRedCardTot - awayRedCardTot)) %>%
     select(-homeScore, -awayScore, -homeRedCardTot, -awayRedCardTot) %>%
-    mutate(Home.Away = "Away")
-
-
-
+    mutate(Home.Away = "Away", Weighted.Win.Prob.Home = -Weighted.Win.Prob.Home) %>%
+    rename(Weighted.Win.Prob=Weighted.Win.Prob.Home)
 )
 
 dim(final.df)
 
 View(head(final.df))
+
+
+write.csv(file="Bundesliga_Complete_MinuteByMinute_Dataset.csv",
+          final.df, row.names=F)
 
 # dim(final.df %>%
 #       filter(Home.Away == "Home"))
