@@ -1,3 +1,5 @@
+## !!! REDUCED DUMMY APPROACH PRODUCES THE BEST AIC !!!
+
 library(mgcv)
 library(tidyverse)
 library(splines)
@@ -47,6 +49,38 @@ gam.no.int.offset.obj <- mgcv::gam(Shots ~ s(Score.Diff) + s(Weighted.Win.Prob) 
 plot.gam(gam.no.int.offset.obj, select=1)
 abline(v=2); abline(v=1); abline(v=0); abline(v=-1); abline(v=-2);
 
+### RATE ACTUALLY DOESN'T HAVE THAT MUCH OF AN IMPACT (AT LEAST HERE....)
+#   - WHEN ESTIMATING, with it as "log(minutes+1)" PREDICTOR, it is LINEAR, with SLOPE of 1
+#   - WHEN USING "minutes" STRAIGHT UP (NOT LOGGED) and LINEAR, it's a DIFFERENT SITUATION THOUGH...
+
+gam.no.int.offset.obj <- mgcv::gam(Shots ~ s(Score.Diff) + s(Weighted.Win.Prob)  + HomeAway + RedCard.Diff + s(minutes.spent),
+                                   data=final.df,
+                                   # offset = log(minutes.spent+1),
+                                   family="nb")
+plot.gam(gam.no.int.offset.obj, select=1, ylim=c(-0.5,0.5))
+abline(v=2); abline(v=1); abline(v=0); abline(v=-1); abline(v=-2);
+
+
+
+
+## DUMMY VARIABLES, instead of "s()" modeling of Score.Diff effect
+gam.no.int.offset.dummy.obj <- mgcv::gam(Shots ~ Score.Diff + s(Weighted.Win.Prob)  + HomeAway + RedCard.Diff + offset(log(minutes.spent+1)),
+                                         data=final.df %>% mutate(Score.Diff = relevel(factor(Score.Diff), ref="0")),
+                                         # offset = log(minutes.spent+1),
+                                         family="nb")
+summary(gam.no.int.offset.dummy.obj)
+plot(gam.no.int.offset.dummy.obj, shade=T)
+
+## DUMMY VARIABLES, but COMBINING SOME OF THEM INTO 1 CATEGORY (LOW SAMPLE)
+gam.no.int.offset.dummy.reduc.obj <- mgcv::gam(Shots ~ Score.Diff + s(Weighted.Win.Prob)  + HomeAway + RedCard.Diff + offset(log(minutes.spent+1)),
+                                               data=final.df %>% mutate(Score.Diff = relevel(factor(ifelse(Score.Diff >= 4, "4.or.more",
+                                                                                                           ifelse(Score.Diff <= -4, "-4.or.less",
+                                                                                                                  Score.Diff))), ref="0")),
+                                               family="nb")
+summary(gam.no.int.offset.dummy.reduc.obj)
+plot(gam.no.int.offset.dummy.reduc.obj, shade=T)
+
+
 
 # gam.no.int.offset.obj <- mgcv::gam(Shots ~ s(Score.Diff)  + HomeAway + RedCard.Diff + offset(log(minutes.spent+1)),
 #                                    data=final.df,
@@ -62,8 +96,8 @@ gam.reg.pois.offset.obj <- mgcv::gam(Shots ~ s(Score.Diff) + s(Weighted.Win.Prob
                                      # offset = log(minutes.spent+1),
                                      family="poisson")
 
-anova(gam.reg.pois.offset.obj,
-      gam.no.int.offset.obj, test = "Chisq")
+# anova(gam.reg.pois.offset.obj,
+#       gam.no.int.offset.obj, test = "Chisq")
 
 
 
@@ -110,6 +144,8 @@ gam.no.score.diff.obj <- mgcv::gam(Shots ~ HomeAway + Weighted.Win.Prob  + HomeA
 AIC( gam.no.int.obj,
      #gam.no.int.obj.scaled,
      gam.no.int.offset.obj,
+     gam.no.int.offset.dummy.obj,
+     gam.no.int.offset.dummy.reduc.obj,
      gam.w.int.obj,
      glm.no.int.obj,
      gam.no.score.diff.obj)
