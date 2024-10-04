@@ -1,19 +1,3 @@
-####
-## SEE LINES 80+, working on PREMATURE "END OF MATCH/SECOND HALF" ENTRIES
-#####
-
-####
-##  SEE LINE 195+
-##
-## CHECK what's up with 0 MINUTES SPENT, YET 5+ SHOTS
-##  => THOSE ARE BAD RECORDINGS AGAIN... e.g. mentions a whole different game during commentary
-##    BUUUUT... SOME ARE POTENTIALLY THOSE "90"/"45" WHICH DON'T CHANGE WITH THE EXTRA TIME...
-##
-## ALSO.. TRY LOOKING FOR the "# OF DIFFERENT TEAM NAMES WITHIN PARENTHESES"
-## (as some games mention TOTALLY DIFFERENT GAMES DURING COMMENTARY)
-####
-
-
 ######
 ## NOTE: there are DIFFERENT GAMES under the SAME GAME_ID!!!
 ## E.g. 252451 shows up as both: "Cologne FC vs someone" and "Hertha vs VfL Wolfsburg"
@@ -30,10 +14,30 @@
 ## ISSUE: if there's a score on min 45+ on the first half, then it doesn't change for minutes that are equal to or lower in the 2nd half
 ##        FIX: Need to find all the moments where there's lower scores for later observations, and set them to the previous, higher, score
 
+## There are BAD ENTRY issues with detecting PARENTHESIZED TEXT STUFF:
+##    * Some are due to poor recording practice (not standardized.. so the parentheses aren't reserved solely for marking the teams)
+##    * Others due to bad string matching (the team mentioned in commentary gets matched to wrong team in the ESPN header)
+
 
 library(tidyverse)
+library(stringdist)
 
-our.df <- read.csv("Bundesliga_All_Minutes_With_Score_Updated_WITH_BOOKING_ODDS.csv",
+## Whether to remove extra time, to align with minute-by-minute approach
+## (plus take care of the issue where events get stacked up on 90th minute, instead of going into 91+)
+remove.extra <- TRUE
+
+
+
+
+league.name <- c("Bundesliga", "SerieA", "LaLiga", "Ligue1", "PremierLeague")
+
+
+for (league in league.name){
+  
+  print(league)
+  
+
+our.df <- read.csv(paste0(league, "_Sami_All_Minutes_With_Score_Updated_WITH_BOOKING_ODDS.csv"),
                    colClasses= c(Minute="character"))
 head(our.df,100)
 
@@ -50,7 +54,7 @@ our.df <- our.df %>%
 print(length(unique(our.df$ID)))
 
 ###
-## CHECK FOR >2 NAMES IN PARENTHESES
+## CHECK FOR >2 OR <2 NAMES IN PARENTHESES
 ###
 
 library(stringr)
@@ -59,22 +63,146 @@ parenth.list <- str_extract_all(our.df$Event, "\\([^()]+\\)")
 # VAR.entries <- 
 
 our.df$Mentioned.Team <- NA
-our.df$Mentioned.Team[sapply(parenth.list, length) == 1] <- unlist(parenth.list)
+our.df$Mentioned.Team[sapply(parenth.list, length) == 1] <- unlist(parenth.list[sapply(parenth.list, length) == 1])
 our.df$Mentioned.Team[str_detect(our.df$Event, "VAR Decision")] <- NA
 
-bad.games.w.too.many.team.mentions <- our.df %>%
+bad.games.w.too.many.or.too.few.team.mentions <- our.df %>%
   group_by(ID) %>%
   summarise(n.team.mentions = length(unique(Mentioned.Team))) %>%
-  filter(n.team.mentions > 3) %>%
+  filter(n.team.mentions != 3) %>%
   .[["ID"]]
 
 
-print("Number of games with too many team mentions (>2 per game), to be dropped:")
-print(length(bad.games.w.too.many.team.mentions))
+# print(dim(our.df %>%
+#   group_by(gameId, gamedDate) %>%
+#   summarise(n.team.mentions = length(unique(Mentioned.Team))) %>%
+#   filter(n.team.mentions <3 )))
+# 
+# many.mention.ids <- our.df %>%
+#   mutate(gamedDate = as.Date(gamedDate)) %>%
+#   group_by(gameId, gamedDate) %>%
+#   summarise(n.team.mentions = length(unique(Mentioned.Team))) %>%
+#   filter(n.team.mentions == 3, gamedDate <= "2012-01-01") %>% 
+#     .[["gameId"]]
+# 
+# View(our.df %>%
+#        filter(gameId %in% many.mention.ids))
+# 
+# View(our.df %>%
+#        filter(gameId == 278309))
+
+print("Number of games with too many (>2 per game) or too few (<2 per game) team mentions, to be dropped:")
+print(length(bad.games.w.too.many.or.too.few.team.mentions))
 
 dim(our.df)
 our.df <- our.df %>% 
-  filter(!ID %in% bad.games.w.too.many.team.mentions)
+  filter(!ID %in% bad.games.w.too.many.or.too.few.team.mentions)
+
+
+
+
+## Bad games with good mentions (3, two teams + NA)
+
+bad.games.w.good.mentions.but.bad.stats <- our.df %>%
+  group_by(ID) %>%
+  summarise(n.team.mentions = length(unique(Mentioned.Team)), total.parenth = length(Mentioned.Team[!is.na(Mentioned.Team)])) %>%
+  filter(n.team.mentions == 3, total.parenth < 15) %>%
+  .[["ID"]]
+
+bad.games.w.good.mentions.but.bad.stats
+
+
+print("Number of games with correct # of unique mentions (2), but too small total mentions (<15), to be dropped:")
+print(length(bad.games.w.good.mentions.but.bad.stats))
+
+dim(our.df)
+our.df <- our.df %>% 
+  filter(!ID %in% bad.games.w.good.mentions.but.bad.stats)
+
+
+## In Serie A: one match abandoned early due to weather conditions (6 parentheses);
+## In Ligue 1: 
+##    * 9 parenth in a badly recorded match of 2012/2013 season; 
+##    * 12 parenth in a badly recorded match of 2013/2014 season
+## 15 is a good cutoff number
+
+# our.df %>%
+#   group_by(ID) %>%
+#   summarise(n.team.mentions = length(unique(Mentioned.Team)), total.parenth = length(Mentioned.Team[!is.na(Mentioned.Team)])) %>%
+#   filter(n.team.mentions == 3) %>%
+#   arrange(total.parenth)
+#   
+# View(our.df %>%
+#        filter(ID == 1771))
+
+
+
+
+
+#######
+## FIND ALL GAMES WHERE ONE TEAM HAD 0 RECORDED STATS
+##  (CLEARLY ITS MENTIONS GOT ASSIGNED TO THE WRONG TEAM)
+#######
+
+# ## Checking the closest string match of parenthesised team names (used in game commentary) to either of Home or Away official ESPN team names
+# ## Counting if both Home & Away team found their match in the commentary (n.matches = 2)
+# ## Otherwise - means that only one of the teams found their match (so BAD MATCHING happened)
+# 
+# n.match.df <- our.df %>% 
+#   group_by(gameId, Mentioned.Team) %>%
+#   summarise(Which.Team = c("HomeTeam", "AwayTeam")[which.min(c(stringdist(HomeTeam[1], Mentioned.Team[1]), stringdist(AwayTeam[1], Mentioned.Team[1])))]) %>%
+#   group_by(gameId) %>%
+#   summarise(n.matches = length(unique(Which.Team)))
+#   
+# 
+# all.bad.matches <- unique(n.match.df$gameId[n.match.df$n.matches < 2])
+# all.bad.matches
+# 
+# ## Bundesliga: 0 games (out of 4550)
+# ## Serie A: 29 games (out of 5627)
+# ## La Liga: 1 game (out of ...)
+# ## Ligue 1: 38 games (out of 5453)
+# ## Premier League: 23 games (out of 4750)
+
+
+## Combining it with checking the STATISTICAL OUTPUTS:
+##    If one side's outputs are fully 0, it pretty much definitely means that it got mistakenly skipped
+
+all.truly.bad.games <- our.df %>%
+  # filter(gameId %in% all.bad.matches) %>%
+  group_by(gameId, gamedDate, HomeTeam, AwayTeam) %>%
+  summarise(
+  homeGoals = sum(Goal == "Home"),
+homeFouls = sum(Foul == "Home"),
+homeCorners = sum(Corner == "Home"),
+homeRedCards = sum(RedCard == "Home"),
+homeShots = sum(ShotAttempts == "Home"),
+homeSaves = sum(Saves == "Home"),
+awayGoals = sum(Goal == "Away"),
+awayFouls = sum(Foul == "Away"),
+awayCorners = sum(Corner == "Away"),
+awayRedCards = sum(RedCard == "Away"),
+awayShots = sum(ShotAttempts == "Away"),
+awaySaves = sum(Saves == "Away")
+) %>% filter( (homeGoals == 0 & homeFouls == 0 & homeCorners == 0 & homeRedCards == 0 & homeShots == 0 & awaySaves == 0) | 
+            (awayGoals == 0 & awayFouls == 0 & awayCorners == 0 & awayRedCards == 0 & awayShots == 0 & homeSaves == 0))
+
+
+# View(all.truly.bad.games)
+
+
+
+print("Dropping the games with 0 recorded stats for one of the teams (virtually impossible):")
+print(length(unique(all.truly.bad.games$gameId)))
+print("out of")
+print(length(unique(our.df$gameId)))
+
+
+our.df <- our.df %>% 
+  filter(!gameId %in% unique(all.truly.bad.games$gameId))
+
+
+
 
 
 
@@ -105,8 +233,8 @@ for (j in 1:length(bad.game.ending.entries$ID)){
 
 
 
-View(our.df %>%
-       filter(ID==1509))
+# View(our.df %>%
+#        filter(ID==1509))
 
 
 ###
@@ -152,15 +280,24 @@ if (sum(log.vec) > 0){
           rep(0, length(log.vec))
         }} ))
 
-View(our.df %>% filter(ID==3))
+# View(our.df %>% filter(ID==3))
+# 
+# View(our.df %>%
+#        # filter(gameId == 252451 )
+#        filter(gameId == 252731)
+# )
 
-View(our.df %>%
-       # filter(gameId == 252451 )
-       filter(gameId == 252731)
-)
 
-our.df$gamedDate <- str_replace(our.df$gamedDate, "^\\s", "")
-our.df$gamedDate <- as.Date(our.df$gamedDate, "%B %d %Y")
+
+
+#######
+## DATES
+#######
+
+# our.df$gamedDate <- str_replace(our.df$gamedDate, "^\\s", "")
+# our.df$gamedDate <- as.Date(our.df$gamedDate, "%B %d %Y")
+# 
+# our.df$gamedDate
 
 tail(our.df$gamedDate)
 
@@ -172,6 +309,12 @@ dim(our.df)
 ########
 ## MAKING A VARIABLE KEEPING TRACK OF RED-CARDED MEN, based on REDCARD COLUMN ("HOME"/"AWAY")
 ########
+
+## REDEFINE REDCARD to also include SECOND YELLOWS !!!
+table(our.df$RedCard)
+our.df$RedCard <- ifelse((our.df$YellowCard != "Null") & str_detect(tolower(our.df$Event), "second yellow"),
+                         our.df$YellowCard,
+                         our.df$RedCard)
 
 
 our.df$homeRedCardTot <- unlist(tapply(our.df$RedCard, our.df$ID, function(x){log.vec <- x == "Home";
@@ -221,6 +364,9 @@ sort(unique(our.df$Minute.num))
 bad.game.ids <- unique(our.df$gameId[which(our.df$Minute.num > 121)])
 bad.game.ids
 
+print("Number of games with bad minutes (>121), to be dropped:")
+print(length(bad.game.ids))
+
 our.df <- our.df %>%
   filter(!gameId %in% bad.game.ids)
 dim(our.df)
@@ -243,9 +389,44 @@ our.df <- our.df %>%
          awayScore = c(lead(awayScore)[-length(awayScore)], 0))
 
 
+## Checking if a game has max minute of <= 90, then we don't count stuff at minute 90 
+##   OR 1st half stuff at minute 45+
+## (As those practices of STACKING typically apply to both end of 1st & 2nd halves)
+
+if (remove.extra){
+  #our.df <- our.df %>% filter(!(half_id == 1 & Minute.clean > 45) & Minute.clean <90)
+  # print(dim(our.df))
+  
+  ## Max 1st half minute
+  # bad.1st.half.game.ids <- our.df %>%
+  #   group_by(gameId, ID, half_id) %>%
+  #   summarize(max.minute = max(Minute.clean)) %>%
+  #   filter(half_id == 1, max.minute <= 45) %>%
+  #   ungroup() %>%
+  #   dplyr::select(gameId) %>% .[[1]]
+  
+  
+  ## Max game minute  
+  bad.game.ids <- our.df %>%
+    group_by(gameId, ID) %>%
+    summarize(max.minute = max(Minute.clean)) %>%
+    filter(max.minute <= 90) %>%
+    ungroup() %>%
+    dplyr::select(gameId) %>% .[[1]]
+  
+  
+  our.df <- our.df %>% 
+    filter(!(gameId %in% bad.game.ids & (Minute.clean >= 90 | (half_id == 1 & Minute.clean >= 45))))
+  
+}
+
+
+# write.csv(our.df, file="A5_CUMSUM_RedCard_AS.csv",
+#           row.names=F)
+
 
 upd.df <- our.df %>%
-  group_by(ID, gameId, half_id, homeScore, awayScore, homeRedCardTot, awayRedCardTot, HomeBet, DrawBet, AwayBet, Weighted.Win.Prob.Home) %>%
+  group_by(ID, gameId, gamedDate, half_id, HomeTeam, AwayTeam, homeScore, awayScore, homeRedCardTot, awayRedCardTot, HomeBet, DrawBet, AwayBet, Weighted.Win.Prob.Home) %>%
   summarise(min.minute = ifelse(homeScore[1] == 0 & awayScore[1] == 0, 
                                 ifelse(half_id[1] == 1, 0, 45), min(Minute.clean)),
             max.minute = max(Minute.clean),
@@ -313,7 +494,7 @@ dim(upd.df)
 main.df <- upd.df %>%
   mutate(Score.Diff = homeScore - awayScore,
          RedCard.Diff = homeRedCardTot - awayRedCardTot) %>%
-  group_by(ID, gameId, Score.Diff, RedCard.Diff, HomeBet, DrawBet, AwayBet, Weighted.Win.Prob.Home) %>%
+  group_by(ID, gameId, gamedDate, HomeTeam, AwayTeam, Score.Diff, RedCard.Diff, HomeBet, DrawBet, AwayBet, Weighted.Win.Prob.Home) %>%
   summarise(minutes.spent = sum(min.spent),
             homeGoals = sum(homeGoals), awayGoals = sum(awayGoals),
             homeFouls = sum(homeFouls), awayFouls = sum(awayFouls),
@@ -326,18 +507,21 @@ dim(main.df)
 # View(main.df)
 
 
+## Saving it for MULTI-RESPONSE VARIABLE
+# write.csv(file=paste0(league, "_Sami_main_df_w_red_cards_WITH_BOOKING_ODDS.csv"), main.df, row.names=F)
 
 
-home.df <- data.frame(main.df[, c("ID", "gameId", "Score.Diff", "RedCard.Diff", "HomeBet", "DrawBet", "Weighted.Win.Prob.Home")], 
+home.df <- data.frame(main.df[, c("ID", "gameId", "gamedDate", "HomeTeam", "Score.Diff", "RedCard.Diff", "HomeBet", "DrawBet", "Weighted.Win.Prob.Home")], 
                       HomeAway="Home",
                       main.df[, c("minutes.spent", colnames(main.df)[str_detect(colnames(main.df), "home")])])
 colnames(home.df) <- str_remove(colnames(home.df), "home")
+colnames(home.df)[colnames(home.df) == "HomeTeam"] <- "Team"
 colnames(home.df)[colnames(home.df) == "HomeBet"] <- "WinBet"
 colnames(home.df)[colnames(home.df) == "Weighted.Win.Prob.Home"] <- "Weighted.Win.Prob"
 
 
 
-away.df <- data.frame(main.df[, c("ID", "gameId", "Score.Diff", "RedCard.Diff", "AwayBet", "DrawBet", "Weighted.Win.Prob.Home")], 
+away.df <- data.frame(main.df[, c("ID", "gameId", "gamedDate", "AwayTeam", "Score.Diff", "RedCard.Diff", "AwayBet", "DrawBet", "Weighted.Win.Prob.Home")], 
                       HomeAway="Away",
                       main.df[, c("minutes.spent", colnames(main.df)[str_detect(colnames(main.df), "away")])])
 away.df$Score.Diff <- -away.df$Score.Diff
@@ -345,6 +529,8 @@ away.df$RedCard.Diff <- -away.df$RedCard.Diff
 away.df$Weighted.Win.Prob.Home <- -away.df$Weighted.Win.Prob.Home
 
 colnames(away.df) <- str_remove(colnames(away.df), "away")
+
+colnames(away.df)[colnames(away.df) == "AwayTeam"] <- "Team"
 colnames(away.df)[colnames(away.df) == "AwayBet"] <- "WinBet"
 colnames(away.df)[colnames(away.df) == "Weighted.Win.Prob.Home"] <- "Weighted.Win.Prob"
 colnames(away.df)
@@ -356,21 +542,31 @@ final.df <- rbind(home.df, away.df) %>%
 
 #### Checking the NEGATIVE MINUTES SPENT
 
-final.df %>% filter(minutes.spent < 0)
+# final.df %>% filter(minutes.spent < 0)
 
 ## CHECKING THE 0 MINUTES SPENT, YET A BUNCH OF STATS ACCUMULATED
 ##  => THOSE ARE BAD RECORDINGS AGAIN... e.g. mentions a whole different game during commentary
-final.df %>% 
-  filter(minutes.spent == 0, Shots > 2)
-
-View(our.df %>%
-       filter(ID == 1589))
+# final.df %>% 
+#   filter(minutes.spent == 0, Shots > 0)
+# 
+# View(our.df %>%
+#        filter(ID == 1589))
 
 # upd.df %>%
 #   filter(ID == 1589)
 
 ## The "match ends" entry at the halftime is ruining some MAX.MINUTES
 
-final.df <- final.df %>% mutate(ID = factor(ID), gameId = factor(gameId))
-write.csv(file="final_df_w_red_cards_WITH_BOOKING_ODDS.csv", final.df, row.names=F)
 
+## There are 2 TERRIBLE games in "Ligue1": 
+##  have commentary from MU vs Mcity, weird 22-13 scoring game... which all leads to GIGANTIC score differentials
+##  (-35 to 35)
+
+if (league == "Ligue1"){
+  final.df <- final.df %>% filter(!(gameId %in% c("252145","252310")))
+}
+
+final.df <- final.df %>% mutate(ID = factor(ID), gameId = factor(gameId))
+write.csv(file= paste0(league, ifelse(remove.extra, "_NO_EXTRA_TIME", ""), "_Sami_final_df_w_red_cards_WITH_BOOKING_ODDS.csv"), final.df, row.names=F)
+
+}
