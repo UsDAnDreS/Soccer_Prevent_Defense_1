@@ -2,11 +2,14 @@
 ## "LeagueName_Sami_minute_by_minute_df_w_red_cards_WITH_BOOKING_ODDS.csv"
 ######
 
-library(mgcv)
-library(tidyverse)
-library(splines)
-library(MASS)
-library(DHARMa)
+require(mgcv)
+# require(tidyverse)
+require(dplyr)
+
+
+# library(splines)
+# library(MASS)
+# library(DHARMa)
 
 
 ## Whether to remove extra time, to align with minute-by-minute approach
@@ -18,7 +21,7 @@ league.name <- c("Bundesliga", "SerieA", "LaLiga", "Ligue1", "PremierLeague")
 ## Covered: "BASELINE", "NO_REDCARDDIFF", "NO_WINPROBDIFF", "NO_SCOREDIFF", "NO_MINUTE", "NO_HOMEAWAY",
 ##          "SCOREDIFF_MINUTE_INT", "REDCARDDIFF_MINUTE_INT",
 ##          "WINPROBEDIFF_SCOREDIFF_INT", "SCOREDIFF_REDCARDDIFF_INT",
-## "WINPROBEDIFF_REDCARDDIFF_INT", "WINPROBEDIFF_MINUTE_INT"
+##          "WINPROBEDIFF_REDCARDDIFF_INT", "WINPROBEDIFF_MINUTE_INT"
 
 string_add <- "NO_WINPROBDIFF"
 
@@ -27,7 +30,7 @@ pred.list <- list()
 load(paste0("LEAVE_SEASON_OUT_PREDICTIONS_gam_nb_obj", "_", string_add, "_Corners.Robj"))
 
 
-for (league in league.name){
+for (league in league.name[4]){
   print(string_add)
   
   print(league)
@@ -70,25 +73,29 @@ for (league in league.name){
   ## Fitting SPLINE models
   ######
   
-  for (year in 2009:2023){
+  for (year in 2023){
     if (league == "LaLiga" & year %in% c(2016, 2022)) next;
     if (league %in% c("SerieA") & year == 2016) next;
     if (league == "Ligue1" & year == 2022) next;
     if (league == "PremierLeague" & year == 2009) next;
     
+
     print(year)
   gam.obj <- gam(Corners ~ 
                                      s(Score.Diff) 
-                                  # + s(Weighted.Win.Prob)  
+                                #  +  s(Weighted.Win.Prob)  
                                    + HomeAway  
                                     + s(RedCard.Diff, k=5) 
                                    + s(Minute.clean)
+                 
                                    # + te(Score.Diff, Minute.clean)
                                    # + te(RedCard.Diff, Minute.clean)
+                 
+                                 #  +te(Score.Diff, Weighted.Win.Prob)
                                    # +te(Score.Diff, RedCard.Diff)
-                                   # +te(Score.Diff, Weighted.Win.Prob)
-                                   # +te(RedCard.Diff, Weighted.Win.Prob)
-                                   +te(Weighted.Win.Prob, Minute.clean)
+    
+                                    #+te(RedCard.Diff, Weighted.Win.Prob)
+                                 #  +te(Weighted.Win.Prob, Minute.clean)
                                    ,
                                    family="nb", data= our.df.cut,
                                   subset = (season != year))
@@ -109,10 +116,11 @@ for (league in league.name){
                                            True = our.true,
                                            Pred = our.pred))
  }
-  }
-  
   save(file=paste0("LEAVE_SEASON_OUT_PREDICTIONS_gam_nb_obj", "_", string_add, "_Corners.Robj"),
        pred.list)
+  }
+  
+
   # dim(pred.list[[1]])
   
  # print(league)

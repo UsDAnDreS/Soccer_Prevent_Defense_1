@@ -13,18 +13,16 @@ library(DHARMa)
 remove.extra <- TRUE
 
 ## If we use models where "Minute.clean" was included
-include.minute <- TRUE
+include.minute <- FALSE
 
 league.name <- c("Bundesliga", "SerieA", "LaLiga", "Ligue1", "PremierLeague")
 
-# load(file="gam_nb_obj_Corners.Robj")
+# load(file="gam_nb_obj_Shots.Robj")
 
-load(file=paste0(ifelse(include.minute,
-                        "",
-                        "NO_MINUTES_TEST_"),
+load(file=paste0(#ifelse(include.minute, "", "NO_MINUTES_TEST_"),
                  "gam_nb_obj",  
                  ifelse(remove.extra, "_NO_EXTRA_TIME", ""), 
-                 "_Corners.Robj"))
+                 "_Shots.Robj"))
 
 
 for (league in league.name){
@@ -164,8 +162,9 @@ for (league in league.name){
     
     
     our.df.pred <- our.df.pred %>%
-      mutate(Corners.Adj = Corners*Adj.Coef.ScoreDiff*Adj.Coef.RedCardDiff*Adj.Coef.HomeAway*Adj.Coef.Minute,
-             Corners.Adj.No.Min = Corners*Adj.Coef.ScoreDiff*Adj.Coef.RedCardDiff*Adj.Coef.HomeAway)
+      mutate(Shots.Adj = Shots*Adj.Coef.ScoreDiff*Adj.Coef.RedCardDiff*Adj.Coef.HomeAway*Adj.Coef.Minute
+            # , Shots.Adj.No.Min = Shots*Adj.Coef.ScoreDiff*Adj.Coef.RedCardDiff*Adj.Coef.HomeAway
+            )
     
   } else {
     
@@ -173,11 +172,11 @@ for (league in league.name){
     
     # Getting the DIFFERENTIALS (log-scale "linear" effects)
     all.score.diffs <- c(min(our.df.pred$Score.Diff):max(our.df.pred$Score.Diff))
-    log.score.diff.effects <- as.numeric(predict(TEST_gam.nb.obj[[league]],
-                                                 newdata = data.frame(Weighted.Win.Prob = 0, HomeAway = "Home", RedCard.Diff =0,
+    log.score.diff.effects <- as.numeric(predict(gam.nb.obj[[league]],
+                                                 newdata = data.frame(Minute.clean=45, Weighted.Win.Prob = 0, HomeAway = "Home", RedCard.Diff =0,
                                                                       Score.Diff = all.score.diffs))) -
-      as.numeric(predict(TEST_gam.nb.obj[[league]],
-                         newdata = data.frame(Weighted.Win.Prob = 0, HomeAway = "Home", RedCard.Diff =0,
+      as.numeric(predict(gam.nb.obj[[league]],
+                         newdata = data.frame(Minute.clean=45, Weighted.Win.Prob = 0, HomeAway = "Home", RedCard.Diff =0,
                                               Score.Diff = rep(0, length(all.score.diffs)))))
     
     names(log.score.diff.effects) <- all.score.diffs
@@ -197,11 +196,11 @@ for (league in league.name){
     ### 2. RED CARD DIFF
     
     all.redcard.diffs <- c(min(our.df.pred$RedCard.Diff):max(our.df.pred$RedCard.Diff))
-    log.redcard.diff.effects <- as.numeric(predict(TEST_gam.nb.obj[[league]],
-                                                   newdata = data.frame(Weighted.Win.Prob = 0, HomeAway = "Home", Score.Diff =0,
+    log.redcard.diff.effects <- as.numeric(predict(gam.nb.obj[[league]],
+                                                   newdata = data.frame(Minute.clean=45, Weighted.Win.Prob = 0, HomeAway = "Home", Score.Diff =0,
                                                                         RedCard.Diff = all.redcard.diffs))) -
-      as.numeric(predict(TEST_gam.nb.obj[[league]],
-                         newdata = data.frame(Weighted.Win.Prob = 0, HomeAway = "Home", Score.Diff =0,
+      as.numeric(predict(gam.nb.obj[[league]],
+                         newdata = data.frame(Minute.clean=45, Weighted.Win.Prob = 0, HomeAway = "Home", Score.Diff =0,
                                               RedCard.Diff = rep(0, length(all.redcard.diffs)))))
     
     names(log.redcard.diff.effects) <- all.redcard.diffs
@@ -220,11 +219,11 @@ for (league in league.name){
     ### 3. HOME/AWAY FACTOR
     
     all.homeaway <- unique(our.df.pred$HomeAway)
-    log.homeaway.effects <- as.numeric(predict(TEST_gam.nb.obj[[league]],
-                                               newdata = data.frame(Weighted.Win.Prob = 0, Score.Diff = 0, RedCard.Diff =0,
+    log.homeaway.effects <- as.numeric(predict(gam.nb.obj[[league]],
+                                               newdata = data.frame(Minute.clean=45, Weighted.Win.Prob = 0, Score.Diff = 0, RedCard.Diff =0,
                                                                     HomeAway = all.homeaway))) -
-      as.numeric(predict(TEST_gam.nb.obj[[league]],
-                         newdata = data.frame( Weighted.Win.Prob = 0, Score.Diff = 0, RedCard.Diff =0,
+      as.numeric(predict(gam.nb.obj[[league]],
+                         newdata = data.frame(Minute.clean=45, Weighted.Win.Prob = 0, Score.Diff = 0, RedCard.Diff =0, 
                                                HomeAway = rep("Home", length(all.homeaway)))))
     
     names(log.homeaway.effects) <- all.homeaway
@@ -239,7 +238,7 @@ for (league in league.name){
     
     
     our.df.pred <- our.df.pred %>%
-      mutate(Corners.Adj = Corners*Adj.Coef.ScoreDiff*Adj.Coef.RedCardDiff*Adj.Coef.HomeAway,
+      mutate(Shots.Adj = Shots*Adj.Coef.ScoreDiff*Adj.Coef.RedCardDiff*Adj.Coef.HomeAway,
       )
     
     
@@ -252,14 +251,14 @@ for (league in league.name){
   # 
   final.df <- our.df.pred %>%
     group_by(gameId, Team) %>%
-    summarise(Corners = sum(Corners),
-              Corners.Adj= sum(Corners.Adj),
-              Corners.Diff = Corners.Adj - Corners,
-              Corners.Adj.No.Min = sum(Corners.Adj.No.Min),
-              Corners.Diff.No.Min = Corners.Adj.No.Min - Corners) %>%
-    arrange(desc(abs(Corners.Diff.No.Min)))
-
-  # print(head(final.df, 50))
+    summarise(Shots = sum(Shots),
+              Shots.Adj= sum(Shots.Adj),
+              Shots.Diff = Shots.Adj - Shots,
+             # Shots.Adj.No.Min = sum(Shots.Adj.No.Min),
+            #  Shots.Diff.No.Min = Shots.Adj.No.Min - Shots
+              ) %>%
+   # arrange(desc(abs(Shots.Diff.No.Min)))
+  arrange(desc(abs(Shots.Diff)))
 
   # our.df %>%
   #   filter(gameId == head(final.df$gameId, 1), Team == head(final.df$Team, 1))
@@ -271,8 +270,8 @@ for (league in league.name){
   ## IF WE WANT THE TABLE ENTRIES FOR TOP MOVEMENTS
   #######
 
-  biggest.jump <- final.df %>% filter(Corners.Diff > 0) %>% dplyr::select(gameId, Team) %>% head(.,1)
-  biggest.fall <- final.df %>% filter(Corners.Diff < 0) %>% dplyr::select(gameId, Team) %>% head(.,1)
+  biggest.jump <- final.df %>% filter(Shots.Diff > 0) %>% dplyr::select(gameId, Team) %>% head(.,1)
+  biggest.fall <- final.df %>% filter(Shots.Diff < 0) %>% dplyr::select(gameId, Team) %>% head(.,1)
 
   cat("\n")
   print("Biggest jump and fall, breakdown:")
@@ -280,8 +279,8 @@ for (league in league.name){
     filter(gameId %in% c(biggest.jump$gameId, biggest.fall$gameId),
            Team %in% c(biggest.jump$Team, biggest.fall$Team)) %>%
     group_by(gameId, Team, gamedDate, HomeAway, Score.Diff, RedCard.Diff) %>%
-    summarise(Corners = sum(Corners),
-              Corners.Adj = sum(Corners.Adj),
+    summarise(Shots = sum(Shots),
+              Shots.Adj = sum(Shots.Adj),
               # minutes.spent = sum(minutes.spent)
               minutes.spent=n()
               ) %>%
@@ -311,56 +310,56 @@ for (league in league.name){
   score.diffs.lead.trail <- biggest.jump.fall %>%
     dplyr::select(-RedCard.Diff) %>%
     group_by(gameId, Team, gamedDate, Score.Diff.Categ) %>%
-    summarise(Corners = sum(Corners),
+    summarise(Shots = sum(Shots),
               minutes = sum(minutes.spent),
               ) %>%
     pivot_wider(names_from = c(Score.Diff.Categ),
-                values_from = c(Corners, minutes)) %>%
+                values_from = c(Shots, minutes)) %>%
     replace(is.na(.), 0 ) %>%
-    mutate(Corners.Total.Actual = Corners_0 + 
-             ifelse("Corners_Lead" %in% colnames(.), Corners_Lead, 0)
-           + ifelse("Corners_Trail" %in% colnames(.), Corners_Trail, 0),
-           #Corners.Total.Adj = sum(Corners.Adj),
-           Corners.Min.Lead = paste0(ifelse("Corners_Lead" %in% colnames(.), Corners_Lead, 0), 
+    mutate(Shots.Total.Actual = Shots_0 + 
+             ifelse("Shots_Lead" %in% colnames(.), Shots_Lead, 0)
+           + ifelse("Shots_Trail" %in% colnames(.), Shots_Trail, 0),
+           #Shots.Total.Adj = sum(Shots.Adj),
+           Shots.Min.Lead = paste0(ifelse("Shots_Lead" %in% colnames(.), Shots_Lead, 0), 
                                     " (", 
                                     ifelse("minutes_Lead" %in% colnames(.), minutes_Lead, 0), 
                                     ")"),
-           Corners.Min.Trail = paste0(ifelse("Corners_Trail" %in% colnames(.), Corners_Trail, 0), 
+           Shots.Min.Trail = paste0(ifelse("Shots_Trail" %in% colnames(.), Shots_Trail, 0), 
                                       " (", 
                                       ifelse("minutes_Trail" %in% colnames(.), minutes_Trail, 0), 
                                       ")")) %>%
-    dplyr::select(Corners.Total.Actual,
-                  #Corners.Total.Adj,
-                  Corners.Min.Lead,# Minutes.Lead,
-                  Corners.Min.Trail #, Minutes.Trail
+    dplyr::select(Shots.Total.Actual,
+                  #Shots.Total.Adj,
+                  Shots.Min.Lead,# Minutes.Lead,
+                  Shots.Min.Trail #, Minutes.Trail
     )
 
   
   score.diffs.2.plus <- biggest.jump.fall %>%
     dplyr::select(-RedCard.Diff) %>%
     group_by(gameId, Team, gamedDate, Score.2.plus.Categ) %>%
-    summarise(Corners = sum(Corners),
+    summarise(Shots = sum(Shots),
               minutes = sum(minutes.spent),
     ) %>%
     pivot_wider(names_from = c(Score.2.plus.Categ),
-                values_from = c(Corners, minutes)) %>%
+                values_from = c(Shots, minutes)) %>%
     replace(is.na(.), 0 ) %>%
-    mutate(Corners.Total.Actual = Corners_0 + 
-             ifelse("Corners_Lead.2.plus" %in% colnames(.), Corners_Lead.2.plus, 0)
-           + ifelse("Corners_Trail.2.plus" %in% colnames(.), Corners_Trail.2.plus, 0),
-           #Corners.Total.Adj = sum(Corners.Adj),
-           Corners.Min.Lead.2.plus = paste0(ifelse("Corners_Lead.2.plus" %in% colnames(.), Corners_Lead.2.plus, 0), 
+    mutate(Shots.Total.Actual = Shots_0 + 
+             ifelse("Shots_Lead.2.plus" %in% colnames(.), Shots_Lead.2.plus, 0)
+           + ifelse("Shots_Trail.2.plus" %in% colnames(.), Shots_Trail.2.plus, 0),
+           #Shots.Total.Adj = sum(Shots.Adj),
+           Shots.Min.Lead.2.plus = paste0(ifelse("Shots_Lead.2.plus" %in% colnames(.), Shots_Lead.2.plus, 0), 
                                            " (", 
                                            ifelse("minutes_Lead.2.plus" %in% colnames(.), minutes_Lead.2.plus, 0), 
                                            ")"),
-           Corners.Min.Trail.2.plus = paste0(ifelse("Corners_Trail.2.plus" %in% colnames(.), Corners_Trail.2.plus, 0), 
+           Shots.Min.Trail.2.plus = paste0(ifelse("Shots_Trail.2.plus" %in% colnames(.), Shots_Trail.2.plus, 0), 
                                              " (", 
                                              ifelse("minutes_Trail.2.plus" %in% colnames(.), minutes_Trail.2.plus, 0), 
                                              ")")) %>%
-    dplyr::select(Corners.Total.Actual,
-                  #Corners.Total.Adj,
-                  Corners.Min.Lead.2.plus,# Minutes.Lead,
-                  Corners.Min.Trail.2.plus #, Minutes.Trail
+    dplyr::select(Shots.Total.Actual,
+                  #Shots.Total.Adj,
+                  Shots.Min.Lead.2.plus,# Minutes.Lead,
+                  Shots.Min.Trail.2.plus #, Minutes.Trail
     )
   
   
@@ -370,60 +369,60 @@ for (league in league.name){
   redcard.diffs.lead.trail  <- biggest.jump.fall %>%
     dplyr::select(-Score.Diff) %>%
     group_by(gameId, Team, gamedDate, RedCard.Diff.Categ) %>%
-    summarise(Corners = sum(Corners),
-              # Corners.Adj = sum(Corners.Adj),
+    summarise(Shots = sum(Shots),
+              # Shots.Adj = sum(Shots.Adj),
               # minutes.spent = sum(minutes.spent)
               minutes = sum(minutes.spent)
               ) %>%
     pivot_wider(names_from = c(RedCard.Diff.Categ),
-                values_from = c(Corners, minutes)) %>%
+                values_from = c(Shots, minutes)) %>%
     replace(is.na(.), 0 ) %>%
-    mutate(Corners.Total.Actual = Corners_0 + 
-             ifelse("Corners_UpMen" %in% colnames(.), Corners_UpMen, 0)
-           + ifelse("Corners_DownMen" %in% colnames(.), Corners_DownMen, 0),
-           #Corners.Total.Adj = sum(Corners.Adj),
-           Corners.Min.UpMen = paste0(ifelse("Corners_UpMen" %in% colnames(.), Corners_UpMen, 0), 
+    mutate(Shots.Total.Actual = Shots_0 + 
+             ifelse("Shots_UpMen" %in% colnames(.), Shots_UpMen, 0)
+           + ifelse("Shots_DownMen" %in% colnames(.), Shots_DownMen, 0),
+           #Shots.Total.Adj = sum(Shots.Adj),
+           Shots.Min.UpMen = paste0(ifelse("Shots_UpMen" %in% colnames(.), Shots_UpMen, 0), 
                                            " (", 
                                            ifelse("minutes_UpMen" %in% colnames(.), minutes_UpMen, 0), 
                                            ")"),
-           Corners.Min.DownMen = paste0(ifelse("Corners_DownMen" %in% colnames(.), Corners_DownMen, 0), 
+           Shots.Min.DownMen = paste0(ifelse("Shots_DownMen" %in% colnames(.), Shots_DownMen, 0), 
                                              " (", 
                                              ifelse("minutes_DownMen" %in% colnames(.), minutes_DownMen, 0), 
                                              ")")) %>%
-    dplyr::select(Corners.Total.Actual,
-                  #Corners.Total.Adj,
-                  Corners.Min.UpMen,# Minutes.Lead,
-                  Corners.Min.DownMen #, Minutes.Trail
+    dplyr::select(Shots.Total.Actual,
+                  #Shots.Total.Adj,
+                  Shots.Min.UpMen,# Minutes.Lead,
+                  Shots.Min.DownMen #, Minutes.Trail
     )
   
   
   redcard.diffs.2.plus  <- biggest.jump.fall %>%
     dplyr::select(-Score.Diff) %>%
     group_by(gameId, Team, gamedDate, RedCard.2.plus.Categ) %>%
-    summarise(Corners = sum(Corners),
-              # Corners.Adj = sum(Corners.Adj),
+    summarise(Shots = sum(Shots),
+              # Shots.Adj = sum(Shots.Adj),
               # minutes.spent = sum(minutes.spent)
               minutes = sum(minutes.spent)
     ) %>%
     pivot_wider(names_from = c(RedCard.2.plus.Categ),
-                values_from = c(Corners, minutes)) %>%
+                values_from = c(Shots, minutes)) %>%
     replace(is.na(.), 0 ) %>%
-    mutate(Corners.Total.Actual = Corners_0 + 
-             ifelse("Corners_UpMen.2.plus" %in% colnames(.), Corners_UpMen.2.plus, 0)
-           + ifelse("Corners_DownMen.2.plus" %in% colnames(.), Corners_DownMen.2.plus, 0),
-           #Corners.Total.Adj = sum(Corners.Adj),
-           Corners.Min.UpMen.2.plus = paste0(ifelse("Corners_UpMen.2.plus" %in% colnames(.), Corners_UpMen.2.plus, 0), 
+    mutate(Shots.Total.Actual = Shots_0 + 
+             ifelse("Shots_UpMen.2.plus" %in% colnames(.), Shots_UpMen.2.plus, 0)
+           + ifelse("Shots_DownMen.2.plus" %in% colnames(.), Shots_DownMen.2.plus, 0),
+           #Shots.Total.Adj = sum(Shots.Adj),
+           Shots.Min.UpMen.2.plus = paste0(ifelse("Shots_UpMen.2.plus" %in% colnames(.), Shots_UpMen.2.plus, 0), 
                                            " (", 
                                            ifelse("minutes_UpMen.2.plus" %in% colnames(.), minutes_UpMen.2.plus, 0), 
                                            ")"),
-           Corners.Min.DownMen.2.plus = paste0(ifelse("Corners_DownMen.2.plus" %in% colnames(.), Corners_DownMen.2.plus, 0), 
+           Shots.Min.DownMen.2.plus = paste0(ifelse("Shots_DownMen.2.plus" %in% colnames(.), Shots_DownMen.2.plus, 0), 
                                              " (", 
                                              ifelse("minutes_DownMen.2.plus" %in% colnames(.), minutes_DownMen.2.plus, 0), 
                                              ")")) %>%
-    dplyr::select(Corners.Total.Actual,
-                  #Corners.Total.Adj,
-                  Corners.Min.UpMen.2.plus,# Minutes.Lead,
-                  Corners.Min.DownMen.2.plus #, Minutes.Trail
+    dplyr::select(Shots.Total.Actual,
+                  #Shots.Total.Adj,
+                  Shots.Min.UpMen.2.plus,# Minutes.Lead,
+                  Shots.Min.DownMen.2.plus #, Minutes.Trail
     )
   
   
@@ -436,22 +435,15 @@ for (league in league.name){
   all.stuff <- score.diffs.lead.trail %>% left_join(redcard.diffs.lead.trail)
 
   all.stuff.lead.trail <- all.stuff %>%
-    left_join(biggest.jump.fall %>% group_by(Team, gameId) %>% summarise(Corners.Adj = round(sum(Corners.Adj), 1)),
+    left_join(biggest.jump.fall %>% group_by(Team, gameId) %>% summarise(Shots.Adj = round(sum(Shots.Adj), 1)),
                                                                  by=c("Team", "gameId"))
 
 
 
   all.stuff.lead.trail <- all.stuff.lead.trail[, c("gameId", "Team", "gamedDate",
-                "Corners.Total.Actual", "Corners.Adj",
-                "Corners.Min.Lead", "Corners.Min.Trail",
-                "Corners.Min.UpMen", "Corners.Min.DownMen")]
-
-
-  # print(colnames(all.stuff.lead.trail))
-  for (j in 1:nrow(all.stuff)){
-    print(paste0(all.stuff.lead.trail[j,-1], collapse=" & "))
-  }
-
+                "Shots.Total.Actual", "Shots.Adj",
+                "Shots.Min.Lead", "Shots.Min.Trail",
+                "Shots.Min.UpMen", "Shots.Min.DownMen")]
   
   
   ####
@@ -460,23 +452,40 @@ for (league in league.name){
   
   all.stuff.lead.trail.plus.2 <- all.stuff.lead.trail %>% left_join(score.diffs.2.plus %>% left_join(redcard.diffs.2.plus))
   all.stuff.lead.trail.plus.2 <- all.stuff.lead.trail.plus.2[, c("gameId", "Team", "gamedDate",
-                                                   "Corners.Total.Actual", "Corners.Adj",
-                                                   "Corners.Min.Lead", "Corners.Min.Trail",
-                                                   "Corners.Min.UpMen", "Corners.Min.DownMen",
-                                                   "Corners.Min.Lead.2.plus", "Corners.Min.Trail.2.plus",
-                                                   "Corners.Min.UpMen.2.plus", "Corners.Min.DownMen.2.plus")]
+                                                   "Shots.Total.Actual", "Shots.Adj",
+                                                   "Shots.Min.Lead", "Shots.Min.Trail",
+                                                   "Shots.Min.UpMen", "Shots.Min.DownMen",
+                                                   "Shots.Min.Lead.2.plus", "Shots.Min.Trail.2.plus",
+                                                   "Shots.Min.UpMen.2.plus", "Shots.Min.DownMen.2.plus")]
+  
+  
+  #####
+  ## THE LATEX PRINTOUT 
+  #####
+  
+  
+  ### THE BASIC PRINTOUT
+  print(head(final.df, 10))
+  
+  ### THE LATEX PRINTOUTS
+  
+  # print(colnames(all.stuff.lead.trail))
+  # for (j in 1:nrow(all.stuff)){
+  #   print(paste0(all.stuff.lead.trail[j,-1], collapse=" & "))
+  # }
+  
   
   # print(colnames(all.stuff.lead.trail.plus.2))
-  for (j in 1:nrow(all.stuff)){
-    print(paste0(all.stuff.lead.trail.plus.2[j,-1], collapse=" & "))
-  }
-  
+  # for (j in 1:nrow(all.stuff)){
+  #   print(paste0(all.stuff.lead.trail.plus.2[j,-1], collapse=" & "))
+  # }
+  # 
   
   ##
   # biggest.jump.fall %>%
   #   group_by(gameId, Team) %>%
-  #   summarise(Corners = sum(Corners),
-  #             Corners.Adj = sum(Corners.Adj),
+  #   summarise(Shots = sum(Shots),
+  #             Shots.Adj = sum(Shots.Adj),
   #             minutes.spent=sum(minutes.spent))
   #
   # biggest.jump.fall %>%
@@ -511,7 +520,7 @@ for (league in league.name){
 # # Groups:   gameId [10]
 # gameId Team                Shots Shots.Adj Shots.Diff
 # <int> <chr>               <int>     <dbl>      <dbl>
-#   1 297218 Eintracht Frankfurt    30      25.3      -4.66
+#   1 297218 Eintracht Frankfurt  30      25.3      -4.66
 # 2 576779 Bayern Munich          15      19.5       4.49
 # 3 273207 Bayer Leverkusen       21      25.3       4.30
 # 4 426918 Borussia Dortmund      26      21.8      -4.23
@@ -520,7 +529,7 @@ for (league in league.name){
 # 7 369895 VfL Wolfsburg          13      17.0       4.01
 # 8 517592 TSG Hoffenheim         19      22.9       3.93
 # 9 320996 Nurnberg               22      18.2      -3.83
-# 10 487235 Borussia Dortmund      27      23.3      -3.69
+# 10 487235 Borussia Dortmund     27      23.3      -3.69
 # 
 # 
 # [1] "SerieA"
